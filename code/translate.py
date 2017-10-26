@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-
+from numpy.linalg import det
 
 def make_dict(vocab, vectors):
     """Make dictionary of vocab and vectors"""
     return {vocab[i]: vectors[i] for i in range(len(vocab))}
-
+=
 
 def vocab_train_test(embedding, lg1, lg2, lg1_vocab):
     """Create training and test vocabularies"""
@@ -35,23 +35,36 @@ def vocab_train_test(embedding, lg1, lg2, lg1_vocab):
         vocab_2D = []
         for lg1_word in lg1_vocab:
             # Translate lg1_word
-            lg1_word_T = lg1_lg2[lg1_word]
+            if lg1_word in lg1_lg2:
+                lg1_word_T = lg1_lg2[lg1_word]
 
-            # Check if translated word (or lowercase) is in lg2_lg1
-            if lg1_word_T in lg2_lg1.keys():
-                lg1_word_R = lg2_lg1[lg1_word_T]
-            elif lg1_word_T.lower() in lg2_lg1.keys():
-                lg1_word_T = lg1_word_T.lower()
-                lg1_word_R = lg2_lg1[lg1_word_T]
-            else:
-                lg1_word_R = None
+                # Check if translated word (or lowercase) is in lg2_lg1
+                if lg1_word_T in lg2_lg1.keys():
+                    lg1_word_R = lg2_lg1[lg1_word_T]
+                elif lg1_word_T.lower() in lg2_lg1.keys():
+                    lg1_word_T = lg1_word_T.lower()
+                    lg1_word_R = lg2_lg1[lg1_word_T]
+                else:
+                    lg1_word_R = None
 
-            # Check if lg1_word and lg1_word_R are equal (lowercase)
-            if lg1_word_R:
-                if lg1_word.lower() == lg1_word_R.lower():
-                    vocab_2D.append((lg1_word, lg1_word_T))
+                # Check if lg1_word and lg1_word_R are equal (lowercase)
+                if lg1_word_R:
+                    if lg1_word.lower() == lg1_word_R.lower():
+                        vocab_2D.append((lg1_word, lg1_word_T))
+        print(len(vocab_2D))
 
         # Create Train/Test vocab
+        # if split == 'random':
+        #     sample = np.random.choice(len(vocab_2D), 6500, replace=False)
+        #     vocab_train = np.asarray(vocab_2D)[sample[:5000]].tolist()
+        #     vocab_test = np.asarray(vocab_2D)[sample[5000:]].tolist()
+        # elif split == 'top':
+        #     sample = np.random.choice(range(6500), 6500, replace=False)
+        #     vocab_train = np.asarray(vocab_2D)[:5000, :].tolist()
+        #     vocab_test = np.asarray(vocab_2D)[:1500, :].tolist()
+        # else:
+        #     pass
+
         if split == 'random':
             sample = np.random.choice(len(vocab_2D), 6500, replace=False)
             vocab_train = np.asarray(vocab_2D)[sample[:5000]].tolist()
@@ -83,7 +96,8 @@ def translation_matrix(X_train, y_train):
     history = model.fit(X_train, y_train, batch_size=128, epochs=20,
                         verbose=False)
     T = model.get_weights()[0]
-    return model, history, T
+    D = np.linalg.det(T)
+    return model, history, T, D
 
 
 def normalize(matrix):
@@ -110,6 +124,8 @@ def translation_results(X, y, vocab, T, lg2_vectors, lg2_vocab):
     yhat = X.dot(T)
     yhat_norm, yhat_normed = normalize(yhat)
 
+
+
     # Nearest Neighbors
     neg_cosine = -yhat_normed.dot(lg2_vectors_normed.T)
     ranked_neighbor_indices = np.argsort(neg_cosine, axis=1)
@@ -129,7 +145,7 @@ def translation_results(X, y, vocab, T, lg2_vectors, lg2_vocab):
                                'yhat_neighbor_norm': yhat_neighbor_norm,
                                'X_word': X_word,
                                'y_word': y_word,
-                               'yhat_neighbor_word': yhat_neighbor_word})
+                               'yhat_neighbor_word': yhat_neighbor_word,})
     results_df = results_df[cols]
     results_df['neighbor_correct'] = results_df.y_word == \
         results_df.yhat_neighbor_word
@@ -181,7 +197,7 @@ def T_pca_EDA(T):
 
 
 def T_report_results(embedding, lg1, lg2, lg1_vectors, lg2_vectors,
-                     X_train, X_test, results_df, isotropy):
+                     X_train, X_test, D, results_df, isotropy):
     md = '## ' + lg1.title() + ' to ' + lg2.title() + ' ' + \
         embedding.title() + '  \n'
     md += '- ' + lg1.title() + ' Vocabulary Size = ' + \
@@ -194,8 +210,12 @@ def T_report_results(embedding, lg1, lg2, lg1_vectors, lg2_vectors,
         '{:,.0f}'.format(lg2_vectors.shape[1]) + '  \n'
     md += '- Train Size = ' + '{:,.0f}'.format(X_train.shape[0]) + '  \n'
     md += '- Test Size = ' + '{:,.0f}'.format(X_test.shape[0]) + '  \n'
+    md += '- Determinant = ' + '{:,.0f}'.format(D) + '  \n'
+
     md += '- <b>Test Accuracy = ' + \
         '{:,.1%}'.format(results_df.neighbor_correct.mean()) + '</b>  \n\n'
+
+
 
     md += '#### Test L2 Norms  \n'
     md += '- X_norm: L2 norms for ' + lg1.title() + ' test vectors  \n'
@@ -221,7 +241,44 @@ if __name__ == '__main__':
                     ('fasttext_top', 'en', 'ru'),
                     ('fasttext_random', 'en', 'de'),
                     ('fasttext_top', 'en', 'de'),
-                    ('zeroshot', 'en', 'it')]
+                    ('fasttext_random', 'en', 'es'),
+                    ('fasttext_top', 'en', 'es'),
+                    ('fasttext_random', 'en', 'zh-CN'),
+                    ('fasttext_top', 'en', 'zh-CN'),
+                    ('fasttext_random', 'de', 'en'),
+                    ('fasttext_top', 'de', 'en'),
+                    ('fasttext_random', 'de', 'es'),
+                    ('fasttext_top', 'de', 'es'),
+                    ('fasttext_random', 'de', 'ru'),
+                    ('fasttext_top', 'de', 'ru'),
+                    ('fasttext_random', 'de', 'zh-CN'),
+                    ('fasttext_top', 'de', 'zh-CN'),
+                    ('fasttext_random', 'ru', 'en'),
+                    ('fasttext_top', 'ru', 'en'),
+                    ('fasttext_random', 'ru', 'es'),
+                    ('fasttext_top', 'ru', 'es'),
+                    ('fasttext_random', 'ru', 'zh-CN'),
+                    ('fasttext_top', 'ru', 'zh-CN'),
+                    ('fasttext_random', 'ru', 'de'),
+                    ('fasttext_top', 'ru', 'de'),
+                    ('fasttext_random', 'zh-CN', 'en'),
+                    ('fasttext_top', 'zh-CN', 'en'),
+                    ('fasttext_random', 'zh-CN', 'es'),
+                    ('fasttext_top', 'zh-CN', 'es'),
+                    ('fasttext_random', 'zh-CN', 'ru'),
+                    ('fasttext_top', 'zh-CN', 'ru'),
+                    ('fasttext_random', 'zh-CN', 'de'),
+                    ('fasttext_top', 'zh-CN', 'de'),
+                    ('fasttext_random', 'es', 'en'),
+                    ('fasttext_top', 'es', 'en'),
+                    ('fasttext_random', 'es', 'de'),
+                    ('fasttext_top', 'es', 'de'),
+                    ('fasttext_random', 'es', 'ru'),
+                    ('fasttext_top', 'es', 'ru'),
+                    ('fasttext_random', 'es', 'zh-CN'),
+                    ('fasttext_top', 'es', 'zh-CN')
+                    #('zeroshot', 'en', 'it')
+                    ]
 
     md = ''
     for translation in translations:
@@ -237,13 +294,12 @@ if __name__ == '__main__':
         lg2_dict = make_dict(lg2_vocab, lg2_vectors)
 
         # Train/Test Vocab/Vectors
-        vocab_train, vocab_test = vocab_train_test(embedding, lg1, lg2,
-                                                   lg1_vocab)
+        vocab_train, vocab_test = vocab_train_test(embedding, lg1, lg2, lg1_vocab)
         X_train, X_test, y_train, y_test = vectors_train_test(vocab_train,
                                                               vocab_test)
 
         # Fit tranlation matrix to training data
-        model, history, T = translation_matrix(X_train, y_train)
+        model, history, T, D = translation_matrix(X_train, y_train)
 
         # Test Data Results
         results_df = translation_results(X_test, y_test, vocab_test, T,
@@ -253,10 +309,10 @@ if __name__ == '__main__':
         T_norm_EDA(results_df)
         isotropy = T_pca_EDA(T)
         md += T_report_results(embedding, lg1, lg2, lg1_vectors, lg2_vectors,
-                               X_train, X_test, results_df, isotropy)
+                               X_train, X_test, D, results_df, isotropy)
 
     # Save report
     md_header = '# Translation Matrix Results  \n'
-    with open('../reports/translation_matrix_report.md', mode='w') as f:
+    with open('../reports1/translation_matrix_report.md', mode='w') as f:
         f.write(md_header + md)
     K.clear_session()

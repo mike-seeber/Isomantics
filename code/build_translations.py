@@ -4,7 +4,7 @@ import urllib
 import json
 from gensim_download import pickle_rw
 from vocab_vectors import embedding_languages_lgs
-
+import sys
 
 def translate_text(source_text, lg_from, lg_to):
     """
@@ -30,13 +30,18 @@ def translate_text(source_text, lg_from, lg_to):
     params.append(urlencode({'q': source_text}))
     url += '&'.join(params)
 
-    request = urllib.request.Request(url)
-    browser = "Mozilla/5.0 (X11; Linux x86_64; rv:45.0) "
-    browser += "Gecko/20100101 Firefox/45.0"
-    request.add_header('User-Agent', browser)
-    response = urllib.request.urlopen(request)
-    dictionary = json.loads(response.read().decode('utf8'))
-    return dictionary["sentences"][0]['trans']
+    try:
+        request = urllib.request.Request(url)
+        browser = "Mozilla/5.0 (X11; Linux x86_64; rv:45.0) "
+        browser += "Gecko/20100101 Firefox/45.0"
+        request.add_header('User-Agent', browser)
+        response = urllib.request.urlopen(request)
+        dictionary = json.loads(response.read().decode('utf8'))
+        return dictionary["sentences"][0]['trans']	
+    except SocketError as e:
+        if e.errno != errno.ECONNRESET:
+            raise # Not error we are looking for
+        pass # Handle error here.
 
 
 def translate_vocab(vocab, lg_from, lg_to):
@@ -73,9 +78,12 @@ if __name__ == '__main__':
     # Load languages and lgs lists for embedding
     languages, lgs = embedding_languages_lgs(embedding)
 
+    lang_from = sys.argv[1]
+    lang_to = sys.argv[2]
+    
     # List of all (lg_from, lg_to) combinations
     translations = [(a, b) for a in lgs for b in lgs if a != b]
-    translations = [('de', 'en')]  # Temporary override
+    translations = [(lang_from,lang_to)]
 
     # For each combination of lgs
     for translation in translations:
